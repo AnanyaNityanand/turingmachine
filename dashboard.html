@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finance Dashboard – TOC Project</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Poppins", sans-serif;
+    background: #0f172a;
+    color: #e5e7eb;
+    margin: 0;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .layout {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+  }
+
+  .top-bar h1 {
+    font-size: 22px;
+    margin: 0;
+  }
+
+  .top-bar button {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: none;
+    cursor: pointer;
+    font-size: 13px;
+    background: #f97316;
+    color: white;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 15px;
+  }
+
+  .card {
+    background: linear-gradient(135deg, #1f2937, #111827);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+  }
+
+  .card h2 {
+    font-size: 13px;
+    margin: 0 0 6px;
+    color: #9ca3af;
+  }
+
+  .card .value {
+    font-size: 20px;
+    font-weight: 600;
+  }
+
+  .badge-state {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    margin-top: 6px;
+  }
+
+  .state-safe { background: #16a34a33; color: #bbf7d0; }
+  .state-moderate { background: #f59e0b33; color: #fde68a; }
+  .state-risk { background: #dc262633; color: #fecaca; }
+
+  .charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin-bottom: 15px;
+  }
+
+  canvas {
+    background: #020617;
+    border-radius: 14px;
+    padding: 10px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  th, td {
+    padding: 8px;
+    border-bottom: 1px solid #1f2937;
+    text-align: left;
+  }
+
+  th {
+    background: #020617;
+    color: #9ca3af;
+    position: sticky;
+    top: 0;
+  }
+
+  .table-card {
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    background: #1f2937;
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+  <div class="top-bar">
+    <div>
+      <h1>📊 Finance Analytics Dashboard</h1>
+      <div style="font-size:12px;color:#9ca3af;">Connected to Node.js + MongoDB + Turing Machine Logic</div>
+    </div>
+    <button onclick="goBack()">← Back to Habit Checker</button>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="grid">
+    <div class="card">
+      <h2>Total Spent</h2>
+      <div class="value" id="totalSpent">₹0</div>
+    </div>
+    <div class="card">
+      <h2>Total Transactions</h2>
+      <div class="value" id="totalCount">0</div>
+    </div>
+    <div class="card">
+      <h2>Top Category</h2>
+      <div class="value" id="topCategory">-</div>
+      <div style="font-size:11px;color:#9ca3af;" id="topCategoryAmount"></div>
+    </div>
+    <div class="card">
+      <h2>Final TM State</h2>
+      <div class="value" id="finalState">START</div>
+      <div id="stateBadge"></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts">
+    <div class="card">
+      <h2>Category-wise Spending</h2>
+      <canvas id="categoryChart" height="200"></canvas>
+    </div>
+    <div class="card">
+      <h2>Last 7 Days Trend</h2>
+      <canvas id="trendChart" height="200"></canvas>
+    </div>
+  </div>
+
+  <!-- Latest Expenses Table -->
+  <div class="card table-card">
+    <h2>Latest Expenses (from Database)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Category</th>
+          <th>Amount (₹)</th>
+        </tr>
+      </thead>
+      <tbody id="expenseBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- CHART.JS CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+const API_BASE = "http://localhost:5000/api/expenses";
+let categoryChart, trendChart;
+
+function goBack() {
+  window.location.href = "index.html";
+}
+
+async function fetchSummary() {
+  const r = await fetch(API_BASE + "/stats/summary");
+  return r.json();
+}
+
+async function fetchRecent() {
+  const r = await fetch(API_BASE + "/stats/recent");
+  return r.json();
+}
+
+async function fetchAll() {
+  const r = await fetch(API_BASE + "/all");
+  return r.json();
+}
+
+function formatDate(d) {
+  const date = new Date(d);
+  return date.toLocaleDateString();
+}
+
+function renderSummary(summary) {
+  document.getElementById("totalSpent").textContent =
+    "₹" + summary.totalSpent.toFixed(2);
+
+  document.getElementById("totalCount").textContent =
+    summary.totalCount;
+
+  if (summary.highestCategory) {
+    document.getElementById("topCategory").textContent =
+      summary.highestCategory;
+    document.getElementById("topCategoryAmount").textContent =
+      "₹" + summary.highestAmount.toFixed(2);
+  }
+
+  const finalState = summary.finalState || "START";
+  document.getElementById("finalState").textContent = finalState;
+
+  const badge = document.getElementById("stateBadge");
+  badge.innerHTML = "";
+  const b = document.createElement("span");
+  b.classList.add("badge-state");
+
+  if (finalState === "SAFE") {
+    b.classList.add("state-safe");
+    b.textContent = "Healthy Spending";
+  } else if (finalState === "MODERATE") {
+    b.classList.add("state-moderate");
+    b.textContent = "Moderate Spending";
+  } else if (finalState === "RISK") {
+    b.classList.add("state-risk");
+    b.textContent = "Risky Spending";
+  } else {
+    b.textContent = "Start";
+  }
+
+  badge.appendChild(b);
+
+  // PIE CHART
+  const labels = Object.keys(summary.byCategory);
+  const values = Object.values(summary.byCategory);
+
+  if (categoryChart) categoryChart.destroy();
+
+  const ctx1 = document.getElementById("categoryChart").getContext("2d");
+  categoryChart = new Chart(ctx1, {
+    type: "pie",
+    data: {
+      labels,
+      datasets: [{
+        data: values
+      }]
+    },
+    options: {
+      plugins: {
+        legend: {
+          labels: { color: "#e5e7eb", font: { size: 11 } }
+        }
+      }
+    }
+  });
+}
+
+function renderTrend(recent) {
+  if (trendChart) trendChart.destroy();
+
+  const ctx2 = document.getElementById("trendChart").getContext("2d");
+
+  trendChart = new Chart(ctx2, {
+    type: "line",
+    data: {
+      labels: recent.labels,
+      datasets: [{
+        data: recent.values,
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      scales: {
+        x: { ticks: { color: "#9ca3af", font: { size: 10 } } },
+        y: { ticks: { color: "#9ca3af", font: { size: 10 } } }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+function renderTable(expenses) {
+  const tbody = document.getElementById("expenseBody");
+  tbody.innerHTML = "";
+
+  expenses.forEach(exp => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${formatDate(exp.date)}</td>
+      <td><span class="chip">${exp.category}</span></td>
+      <td>₹${exp.amount.toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function init() {
+  try {
+    const [summary, recent, all] = await Promise.all([
+      fetchSummary(),
+      fetchRecent(),
+      fetchAll()
+    ]);
+
+    renderSummary(summary);
+    renderTrend(recent);
+    renderTable(all);
+  } catch (err) {
+    console.error(err);
+    alert("Error loading dashboard data. Make sure backend is running.");
+  }
+}
+
+init();
+</script>
+
+</body>
+</html>
